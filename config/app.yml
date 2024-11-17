@@ -1,0 +1,18 @@
+COMMON: &common
+  DEBUG: False
+  SQLALCHEMY_TRACK_MODIFICATIONS: False
+
+development:
+  <<: *common
+  DEBUG: True
+#  SQLALCHEMY_DATABASE_URI: 'sqlite://'
+#  SQLALCHEMY_DATABASE_URI: 'sqlite:///device_db.sqlite'
+  SQLALCHEMY_DATABASE_URI: 'mysql://root:Qwerty123@localhost:3306/test'
+
+production:
+  <<: *common
+  SQLALCHEMY_DATABASE_URI: 'mysql://root:Qwerty123@localhost/test'
+
+ADDITIONAL_CONFIG:
+  MYSQL_ROOT_USER: root
+  MYSQL_ROOT_PASSWORD: Qwerty123
