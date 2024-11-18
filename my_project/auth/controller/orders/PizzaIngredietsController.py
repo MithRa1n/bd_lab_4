@@ -1,10 +1,10 @@
-from typing import List
+from typing import List, Dict
 from my_project.auth.dao.orders.PizzaIngredientsDAO import PizzaIngredientsDAO
 from my_project.auth.domain.orders.PizzaIngredients import PizzaIngredient
 
 class PizzaIngredientsController:
     _dao = PizzaIngredientsDAO()
-
+    @classmethod
     def find_all(self) -> List[PizzaIngredient]:
         return self._dao.find_all()
 
@@ -19,3 +19,6 @@ class PizzaIngredientsController:
 
     def delete(self, pizza_id: int, ingredient_id: int) -> None:
         self._dao.delete(pizza_id, ingredient_id)
+
+    def find_all_with_details(self) -> List[Dict]:
+        return self._dao.find_all_with_details()

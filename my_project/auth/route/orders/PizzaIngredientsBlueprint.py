@@ -36,3 +36,12 @@ def update_pizza_ingredient(pizza_ingredient_id: int) -> Response:
 def delete_pizza_ingredient(pizza_ingredient_id: int) -> Response:
     PizzaIngredientsController.delete(pizza_ingredient_id)
     return make_response("Pizza ingredient deleted", HTTPStatus.NO_CONTENT)
+
+@pizza_ingredients_bp.route('/pizza-ingredients', methods=['GET'])
+def get_pizza_ingredients_with_details():
+    """
+    Отримує всі записи PizzaIngredients з деталями про піци та інгредієнти.
+    """
+    controller = PizzaIngredientsController()
+    data = controller.find_all_with_details()  # Метод для отримання розширених даних
+    return jsonify(data)

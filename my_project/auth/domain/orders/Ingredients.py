@@ -20,9 +20,7 @@ class Ingredient(db.Model):
         return {
             "ingredient_id": self.ingredient_id,
             "name": self.name,
-            "quantity": self.quantity,
-            "pizzas": [pizza.id for pizza in self.pizzas]
-        }
+            "quantity": self.quantity,        }
 
     @staticmethod
     def create_from_dto(dto_dict: Dict[str, Any]) -> Ingredient:

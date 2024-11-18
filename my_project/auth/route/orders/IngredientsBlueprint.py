@@ -1,3 +1,4 @@
+
 from http import HTTPStatus
 from flask import Blueprint, jsonify, Response, request, make_response
 from my_project.auth.controller import ingredients_controller
