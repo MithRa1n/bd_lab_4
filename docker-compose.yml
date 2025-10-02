@@ -1,0 +1,22 @@
+services:
+  web:
+    image: mithra1n/innodb:latest
+    ports:
+      - "8080:8080"
+    restart: always
+    pull_policy: always
+    environment:
+      - MYSQL_ROOT_USER=${MYSQL_ROOT_USER}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      --interval 60
+      --cleanup
+      --include-stopped
+      --revive-stopped
