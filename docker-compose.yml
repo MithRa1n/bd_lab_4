@@ -2,7 +2,7 @@ services:
   web:
     image: mithra1n/innodb:latest
     ports:
-      - "8080:8080"
+      - "80:8080"
     restart: always
     pull_policy: always
     environment:
