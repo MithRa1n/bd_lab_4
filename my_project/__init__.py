@@ -6,11 +6,10 @@ apavelchak@gmail.com
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from http import HTTPStatus
 import secrets
 import jwt
-import datetime
 from typing import Dict, Any
 from functools import wraps
 from urllib.parse import quote_plus
@@ -337,6 +336,74 @@ def _init_swagger(app: Flask) -> None:
         'password': fields.String(required=True, description='Password')
     })
     
+    register_model = api.model('Register', {
+        'username': fields.String(required=True, description='Username'),
+        'password': fields.String(required=True, description='Password'),
+        'email': fields.String(required=True, description='Email'),
+        'phone': fields.String(description='Phone number'),
+        'address': fields.String(description='Delivery address')
+    })
+    
+    order_create_model = api.model('OrderCreate', {
+        'pizza_ids': fields.List(fields.Integer, required=True, description='List of pizza IDs'),
+        'address': fields.String(description='Delivery address (optional)')
+    })
+    
+    # API Response models
+    token_response_model = api.model('TokenResponse', {
+        'token': fields.String(description='JWT Access Token'),
+        'user': fields.Nested(api.model('UserInfo', {
+            'id': fields.Integer(description='User ID'),
+            'username': fields.String(description='Username'),
+            'email': fields.String(description='Email')
+        })),
+        'message': fields.String(description='Success message')
+    })
+    
+    message_response_model = api.model('MessageResponse', {
+        'message': fields.String(description='Response message')
+    })
+    
+    stats_model = api.model('OrderStats', {
+        'total_orders': fields.Integer(description='Total number of orders'),
+        'total_revenue': fields.Float(description='Total revenue'),
+        'status_distribution': fields.Raw(description='Orders by status'),
+        'average_order_value': fields.Float(description='Average order value')
+    })
+    
+    popular_pizza_model = api.model('PopularPizza', {
+        'id': fields.Integer(description='Pizza ID'),
+        'name': fields.String(description='Pizza name'),
+        'description': fields.String(description='Pizza description'),
+        'price': fields.Float(description='Price'),
+        'size': fields.String(description='Size'),
+        'ingredients': fields.List(fields.String, description='Ingredients'),
+        'order_count': fields.Integer(description='Number of times ordered')
+    })
+    
+    active_user_model = api.model('ActiveUser', {
+        'username': fields.String(description='Username'),
+        'email': fields.String(description='Email'),
+        'order_count': fields.Integer(description='Number of orders'),
+        'total_spent': fields.Float(description='Total amount spent')
+    })
+    
+    health_model = api.model('HealthStatus', {
+        'status': fields.String(description='System status'),
+        'message': fields.String(description='Status message'),
+        'version': fields.String(description='API version'),
+        'database': fields.String(description='Database status'),
+        'users_count': fields.Integer(description='Number of users'),
+        'pizzas_count': fields.Integer(description='Number of pizzas'),
+        'orders_count': fields.Integer(description='Number of orders'),
+        'timestamp': fields.String(description='Current timestamp')
+    })
+    
+    order_status_model = api.model('OrderStatus', {
+        'status': fields.String(required=True, description='New order status', 
+                              enum=['New', 'Preparing', 'On the way', 'Delivered', 'Cancelled'])
+    })
+    
     def token_required(f):
         @wraps(f)
         def decorated(*args, **kwargs):
@@ -391,10 +458,15 @@ def _init_swagger(app: Flask) -> None:
     
     @ns_auth.route('/register')
     class Register(Resource):
+        @api.expect(register_model)
+        @api.marshal_with(message_response_model)
         def post(self):
             """Register new user"""
             data = request.get_json()
             username = data.get('username')
+            
+            if not username or not data.get('password') or not data.get('email'):
+                api.abort(400, 'Username, password and email are required')
             
             if username in users_db:
                 api.abort(400, f'User {username} already exists')
@@ -413,6 +485,7 @@ def _init_swagger(app: Flask) -> None:
     @ns_auth.route('/login')
     class Login(Resource):
         @api.expect(login_model)
+        @api.marshal_with(token_response_model)
         def post(self):
             """Login and get JWT token"""
             data = request.get_json()
@@ -425,7 +498,7 @@ def _init_swagger(app: Flask) -> None:
             
             token = jwt.encode({
                 'username': username,
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
+                'exp': datetime.utcnow() + timedelta(hours=24)
             }, app.config['SECRET_KEY'], algorithm='HS256')
             
             return {
@@ -525,6 +598,7 @@ def _init_swagger(app: Flask) -> None:
             return pizza
         
         @api.doc(security='Bearer')
+        @api.marshal_with(message_response_model)
         @token_required
         def delete(self, pizza_id):
             """Delete pizza by ID (admin only)"""
@@ -549,6 +623,8 @@ def _init_swagger(app: Flask) -> None:
             return user_orders
         
         @api.doc(security='Bearer')
+        @api.expect(order_create_model)
+        @api.marshal_with(order_model)
         @token_required
         def post(self):
             """Create new order"""
@@ -568,6 +644,9 @@ def _init_swagger(app: Flask) -> None:
                     ordered_pizzas.append(pizza)
                     total_price += pizza['price']
             
+            if not ordered_pizzas:
+                api.abort(400, 'No valid pizzas found')
+            
             order = {
                 'id': order_counter,
                 'username': g.current_user,
@@ -576,7 +655,7 @@ def _init_swagger(app: Flask) -> None:
                 'total_price': total_price,
                 'status': 'New',
                 'delivery_address': data.get('address', users_db[g.current_user]['address']),
-                'created_at': datetime.datetime.utcnow().isoformat()
+                'created_at': datetime.utcnow().isoformat()
             }
             
             orders_db[order_counter] = order
@@ -601,6 +680,8 @@ def _init_swagger(app: Flask) -> None:
             return order
         
         @api.doc(security='Bearer')
+        @api.expect(order_status_model)
+        @api.marshal_with(order_model)
         @token_required
         def put(self, order_id):
             """Update order status (admin only)"""
@@ -621,6 +702,7 @@ def _init_swagger(app: Flask) -> None:
             api.abort(400, 'Status is required')
         
         @api.doc(security='Bearer')
+        @api.marshal_with(message_response_model)
         @token_required
         def delete(self, order_id):
             """Cancel order"""
@@ -651,6 +733,7 @@ def _init_swagger(app: Flask) -> None:
     @ns_orders.route('/stats')
     class OrderStats(Resource):
         @api.doc(security='Bearer')
+        @api.marshal_with(stats_model)
         @token_required
         def get(self):
             """Order statistics (admin only)"""
@@ -674,6 +757,7 @@ def _init_swagger(app: Flask) -> None:
     
     @ns_pizzas.route('/popular')
     class PopularPizzas(Resource):
+        @api.marshal_list_with(popular_pizza_model)
         def get(self):
             """Get top popular pizzas"""
             pizza_counts = {}
@@ -697,6 +781,7 @@ def _init_swagger(app: Flask) -> None:
     
     @ns_pizzas.route('/by-price')
     class PizzasByPrice(Resource):
+        @api.marshal_list_with(pizza_model)
         def get(self):
             """Pizzas sorted by price"""
             sorted_pizzas = sorted(pizzas_db.values(), key=lambda x: x.get('price', 0))
@@ -705,6 +790,7 @@ def _init_swagger(app: Flask) -> None:
     @ns_users.route('/active')
     class ActiveUsers(Resource):
         @api.doc(security='Bearer')
+        @api.marshal_list_with(active_user_model)
         @token_required
         def get(self):
             """Get active users (admin only)"""
@@ -749,8 +835,24 @@ def _init_swagger(app: Flask) -> None:
             
             return recent_orders
     
+    @ns_orders.route('/statuses')
+    class OrderStatuses(Resource):
+        def get(self):
+            """Get available order statuses"""
+            return {
+                'statuses': ['New', 'Preparing', 'On the way', 'Delivered', 'Cancelled'],
+                'descriptions': {
+                    'New': 'Order has been placed and is waiting to be processed',
+                    'Preparing': 'Order is being prepared in the kitchen',
+                    'On the way': 'Order is out for delivery',
+                    'Delivered': 'Order has been successfully delivered',
+                    'Cancelled': 'Order has been cancelled'
+                }
+            }
+    
     @ns_health.route('/status')
     class HealthCheck(Resource):
+        @api.marshal_with(health_model)
         def get(self):
             """System health check"""
             return {
@@ -761,21 +863,62 @@ def _init_swagger(app: Flask) -> None:
                 'users_count': len(users_db),
                 'pizzas_count': len(pizzas_db),
                 'orders_count': len(orders_db),
-                'timestamp': datetime.datetime.utcnow().isoformat()
+                'timestamp': datetime.utcnow().isoformat()
             }
     
     @app.route("/")
     def hello_world():
         return jsonify({
-            'message': 'Hello! Use /api/docs/ to view API documentation',
+            'message': 'Welcome to Pizza Delivery Management API!',
             'docs_url': '/api/docs/',
             'api_version': '2.0',
+            'features': [
+                'JWT Authentication',
+                'User Management',
+                'Pizza Catalog',
+                'Order Management',
+                'Admin Dashboard',
+                'Real-time Statistics'
+            ],
             'endpoints': {
-                'auth': '/api/v1/auth/',
-                'pizzas': '/api/v1/pizzas/',
-                'orders': '/api/v1/orders/',
-                'health': '/api/v1/health/'
-            }
+                'authentication': {
+                    'login': '/api/v1/auth/login',
+                    'register': '/api/v1/auth/register'
+                },
+                'users': {
+                    'profile': '/api/v1/users/profile',
+                    'list_all': '/api/v1/users/',
+                    'active_users': '/api/v1/users/active'
+                },
+                'pizzas': {
+                    'catalog': '/api/v1/pizzas/',
+                    'by_id': '/api/v1/pizzas/{id}',
+                    'popular': '/api/v1/pizzas/popular',
+                    'by_price': '/api/v1/pizzas/by-price'
+                },
+                'orders': {
+                    'my_orders': '/api/v1/orders/',
+                    'create': '/api/v1/orders/',
+                    'by_id': '/api/v1/orders/{id}',
+                    'all_orders': '/api/v1/orders/all',
+                    'statistics': '/api/v1/orders/stats',
+                    'recent': '/api/v1/orders/recent',
+                    'statuses': '/api/v1/orders/statuses'
+                },
+                'system': {
+                    'health': '/api/v1/health/status'
+                }
+            },
+            'test_credentials': {
+                'admin': {'username': 'admin', 'password': 'admin123'},
+                'user': {'username': 'user', 'password': 'user123'}
+            },
+            'instructions': [
+                '1. Visit /api/docs/ for interactive API documentation',
+                '2. Login with test credentials to get JWT token',
+                '3. Use "Bearer <token>" in Authorization header for protected endpoints',
+                '4. Admin users have access to management features'
+            ]
         })
 
 def _init_db(app: Flask) -> None:
