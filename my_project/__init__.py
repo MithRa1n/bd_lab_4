@@ -295,7 +295,7 @@ def _init_swagger(app: Flask) -> None:
     
     api = Api(
         app, 
-        title='Pizza Delivery Management API 228',
+        title='Pizza Delivery Management API 1337',
         description='Complete REST API for pizza delivery management system with authentication',
         version='2.0',
         doc='/api/docs/',
